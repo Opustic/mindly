@@ -112,6 +112,7 @@ def create_quiz(titre: str, duree_par_question_secondes: int, questions: list[di
     quiz_key = f"quiz:{quiz_id}"
     r.hset(quiz_key, mapping={
         "titre": titre,
+        "code": code,
         "statut": STATUT_BROUILLON,
         "duree_par_question_secondes": duree_par_question_secondes,
         "date_creation": _now_iso(),
@@ -183,6 +184,25 @@ def get_quiz_id_from_code(code: str) -> Optional[str]:
     """Résout un code d'accès (6 caractères) en quiz_id. None si expiré/inconnu."""
     r = get_redis_client()
     return r.get(f"code:{code}")
+
+
+def get_quiz_code(quiz_id: str) -> Optional[str]:
+    """Retourne le code d'accès (6 caractères) d'un quiz.
+
+    Fonctionne pour les quiz récents (champ 'code' dans le hash)
+    comme pour les anciens quiz (scan des clés code:*).
+    """
+    r = get_redis_client()
+    data = r.hgetall(f"quiz:{quiz_id}")
+    if not data:
+        return None
+    code = data.get("code")
+    if code:
+        return code
+    for key in r.scan_iter(match="code:*"):
+        if r.get(key) == quiz_id:
+            return key.split(":", 1)[1]
+    return None
 
 
 def list_all_quizzes() -> list[dict]:
